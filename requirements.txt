@@ -1,0 +1,16 @@
+# Local Reader's Mac server. Install with scripts/setup-mac.sh (or `uv pip install -r requirements.txt`).
+fastapi==0.141.1
+uvicorn==0.52.4
+python-multipart==0.0.32
+beautifulsoup4==4.15.0
+markdown-it-py==4.0.0
+pypdf==6.18.0
+httpx>=0.28,<1
+Pillow==13.0.0
+numpy==2.5.3
+soundfile==0.14.0
+
+# Kokoro speech runs on Apple Silicon (MLX). Other platforms can still run the
+# server and its tests; only the Kokoro engine is unavailable.
+kokoro-mlx==0.1.2; sys_platform == "darwin" and platform_machine == "arm64"
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl ; sys_platform == "darwin" and platform_machine == "arm64"

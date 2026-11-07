@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-and-server:
+    name: Web, server, sync API, extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck and build the reader UI
+        run: bun run build
+      - name: Reader UI tests
+        run: bun test tests
+      - name: Sync API typecheck and tests
+        run: |
+          bunx tsc -p convex/tsconfig.json
+          bunx vitest run convex/sync.test.ts
+
+      # Kokoro (MLX) is Apple Silicon only; requirements.txt skips it elsewhere,
+      # and the server tests never load a speech model.
+      - name: Python environment
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv/bin/python -r requirements.txt
+      - name: Server tests
+        run: .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Updater tests
+        run: .venv/bin/python -m unittest discover -s scripts -p 'test_updates.py' -v
+
+      - name: Extension tests
+        run: |
+          for test in test-extension test-cloud test-queue test-parallel test-popup-open test-progress-context; do
+            echo "::group::$test"; node "extension/$test.cjs"; echo "::endgroup::"
+          done
+      - name: Extension capture tests (headless Chrome)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/playwright" --no-save --no-audit --no-fund playwright-core@1.56.1
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/playwright/node_modules/playwright-core"
+          node extension/test-extraction.cjs
+          node extension/test-image-cache.cjs
+
+      - name: Release tooling
+        run: node scripts/release-notes.mjs --check
+
+  mac:
+    name: Mac app and shared Swift code
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build the Mac app wrapper
+        run: ./desktop/build.sh
+      - name: Native update-notice test
+        run: python3 desktop/test_update_notice.py
+      - name: Shared Swift persistence and sync checks
+        run: |
+          swiftc -module-cache-path "$RUNNER_TEMP/swift-module-cache" -swift-version 5 \
+            -parse-as-library ios/LocalReader/Shared/*.swift ios/Checks/CoreChecks.swift \
+            -o "$RUNNER_TEMP/core-checks"
+          "$RUNNER_TEMP/core-checks"
+      - name: Shell script syntax
+        run: |
+          bash -n scripts/setup-mac.sh desktop/build.sh
+          zsh -n scripts/install-pocket.command
+          sh -n ios/prepare.sh
+
+  ios:
+    name: iOS simulator build
+    # The project targets Xcode 26 (see ios/README.md).
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      # Pinned: the next step compares XcodeGen's output with the committed project.
+      - name: Install XcodeGen 2.46.0
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen"
+          dirname "$(find "$RUNNER_TEMP/xcodegen" -type f -name xcodegen -perm -u+x | head -1)" >> "$GITHUB_PATH"
+      - name: Check XcodeGen version
+        run: xcodegen --version | grep -q 2.46.0
+      - name: Prepare pinned SDK and generate the project
+        run: ./ios/prepare.sh
+      - name: Generated project matches the committed one
+        run: git diff --exit-code -- ios/LocalReader.xcodeproj
+      - name: Build for the simulator
+        run: |
+          xcodebuild -project ios/LocalReader.xcodeproj -scheme LocalReader \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/ios-build" CODE_SIGNING_ALLOWED=NO build

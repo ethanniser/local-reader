@@ -1,0 +1,31 @@
+{
+  "name": "local-reader",
+  "version": "0.1.0",
+  "description": "A personal reading library that reads to you with on-device neural speech.",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ethanniser/local-reader.git"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "dev": "vite",
+    "test": "bun test tests",
+    "test:convex": "tsc -p convex/tsconfig.json && vitest run convex/sync.test.ts",
+    "test:extension": "for t in test-extension test-cloud test-queue test-parallel test-popup-open test-progress-context; do node extension/$t.cjs || exit 1; done",
+    "release-notes": "node scripts/release-notes.mjs"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6",
+    "convex-test": "^0.0.66",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.0",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "convex": "^1.49.0",
+    "qrcode": "^1.5.4"
+  }
+}

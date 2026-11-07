@@ -1,0 +1,14 @@
+// Bundle identifier prefix and signing team for every target.
+//
+// Don't edit this file to sign your own build. Create ios/Signing.local.xcconfig
+// (ignored by Git) with your values instead, for example:
+//
+//   LOCAL_READER_BUNDLE_PREFIX = com.example
+//   DEVELOPMENT_TEAM = ABCDE12345
+//
+// Keeping your changes out of tracked files keeps the checkout clean, which the
+// Mac and iPhone updaters require.
+LOCAL_READER_BUNDLE_PREFIX = com.ethanniser
+DEVELOPMENT_TEAM =
+
+#include? "Signing.local.xcconfig"

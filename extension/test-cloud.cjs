@@ -1,0 +1,33 @@
+const assert=require('node:assert/strict');
+require('./cloud-core.js');const cloud=globalThis.ReaderCloud;
+const fs=require('node:fs'),vm=require('node:vm');
+const pair={url:'https://personal-test.convex.site',token:'p'.repeat(48)};
+const link='localreader://pair?'+new URLSearchParams(pair);
+assert.deepEqual(cloud.pairing(link),pair);
+for(const url of ['http://personal-test.convex.site','https://personal-test.convex.site.evil.com','https://u:p@personal-test.convex.site','https://personal-test.convex.site/path','https://personal-test.convex.site/?token=oops','https://example.com'])assert.throws(()=>cloud.config({...pair,url}));
+assert.throws(()=>cloud.pairing(link+'&token=duplicate'));
+assert.throws(()=>cloud.config({...pair,token:'short'}));
+assert.throws(()=>cloud.imageURL('http://127.0.0.1/private'));
+assert.throws(()=>cloud.imageURL('file:///etc/passwd'));
+assert.throws(()=>cloud.imageURL('https://user:password@example.org/image'));
+const draft={id:'draft-123',payload:{source:'https://example.com/story'}};
+const article=cloud.article(draft,' A story ','First paragraph words.\n\nSecond paragraph.', ' Essays, read later, essays',[],1234);
+assert.deepEqual(article.words,['First','paragraph','words.','Second','paragraph.']);
+assert.deepEqual(article.paragraphs,[{start:0,end:3,kind:'paragraph'},{start:3,end:5,kind:'paragraph'}]);
+assert.deepEqual(article.tags,['essays','read later']);assert.equal(article.contentUpdated,1234);
+assert.throws(()=>cloud.article(draft,'Title',' ',''));
+const long=cloud.article(draft,'Long','word '.repeat(200000),'');assert.equal(long.words.length,200000);
+(async()=>{
+ let called=0;
+ await cloud.request(pair,'/documents',{method:'POST',body:JSON.stringify(article)},async(url,options)=>{
+  called++;assert.equal(url,pair.url+'/documents');assert.equal(options.headers.Authorization,'Bearer '+pair.token);assert.equal(options.redirect,'error');assert.equal(options.credentials,'omit');return{ok:true,json:async()=>({document:{id:article.id}})};
+ });assert.equal(called,1);
+ await assert.rejects(()=>cloud.request(pair,'/documents',{},async()=>({ok:false,status:401})),/Pairing was rejected/);
+ await assert.rejects(()=>cloud.request({...pair,url:'https://evil.example'},'/documents',{},()=>{throw Error('must not fetch')}),/Convex site/);
+ await assert.rejects(()=>cloud.request(pair,'https://evil.example',{},()=>{throw Error('must not fetch')}),/Invalid cloud endpoint/);
+ const png='data:image/png;base64,'+Buffer.from([137,80,78,71,13,10,26,10,1,2]).toString('base64');
+ const image=await cloud.uploadImage(pair,{src:png,position:2,alt:'Image'},async(url,options)=>{assert.equal(url,pair.url+'/images');assert.equal(options.headers['Content-Type'],'image/png');return{ok:true,json:async()=>({url:'/images?id=storage123'})};},async value=>value);
+ assert.equal(image.src,'/images?id=storage123');
+ await assert.rejects(()=>cloud.uploadImage(pair,{src:png},async()=>({ok:true,json:async()=>({url:'https://evil.example/image'})}),async value=>value),/invalid image receipt/);
+ console.log('Direct cloud pairing, article serialization, auth, image upload and private draft tests passed.');
+})().catch(error=>{console.error(error);process.exitCode=1});

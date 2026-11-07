@@ -1,0 +1,114 @@
+name: LocalReader
+options:
+  deploymentTarget:
+    iOS: '18.0'
+# Bundle prefix and team come from Signing.xcconfig (+ optional Signing.local.xcconfig).
+configFiles:
+  Debug: Signing.xcconfig
+  Release: Signing.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    CODE_SIGN_STYLE: Automatic
+packages:
+  FluidAudio:
+    path: .build/FluidAudio
+targets:
+  LocalReader:
+    type: application
+    platform: iOS
+    sources: [LocalReader]
+    dependencies:
+      - package: FluidAudio
+      - target: LocalReaderShare
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(LOCAL_READER_BUNDLE_PREFIX).localreader
+        TARGETED_DEVICE_FAMILY: '1,2'
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Local Reader
+        INFOPLIST_KEY_UIBackgroundModes: [audio]
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        MARKETING_VERSION: '1.0'
+        CURRENT_PROJECT_VERSION: '6'
+    entitlements:
+      path: LocalReader/LocalReader.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER), $(AppIdentifierPrefix)$(LOCAL_READER_BUNDLE_PREFIX).localreader.sync]
+    info:
+      path: LocalReader/Info.plist
+      properties:
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        SyncKeychainAccessGroup: $(AppIdentifierPrefix)$(LOCAL_READER_BUNDLE_PREFIX).localreader.sync
+        UIBackgroundModes: [audio]
+        CFBundleURLTypes:
+          - CFBundleURLName: $(LOCAL_READER_BUNDLE_PREFIX).localreader.pair
+            CFBundleURLSchemes: [localreader]
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+  LocalReaderShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+        excludes: [Info.plist]
+      - path: LocalReader/Shared/Article.swift
+      - path: LocalReader/Shared/ArticleImport.swift
+      - path: LocalReader/Shared/SyncClient.swift
+      - path: LocalReader/Shared/SharedConnection.swift
+      - path: LocalReader/Shared/RasterImage.swift
+      - path: LocalReader/Shared/ImportImages.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(LOCAL_READER_BUNDLE_PREFIX).localreader.share
+        APPLICATION_EXTENSION_API_ONLY: YES
+        MARKETING_VERSION: '1.0'
+        CURRENT_PROJECT_VERSION: '6'
+        TARGETED_DEVICE_FAMILY: '1,2'
+    entitlements:
+      path: ShareExtension/ShareExtension.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER), $(AppIdentifierPrefix)$(LOCAL_READER_BUNDLE_PREFIX).localreader.sync]
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleDisplayName: Local Reader
+        SyncKeychainAccessGroup: $(AppIdentifierPrefix)$(LOCAL_READER_BUNDLE_PREFIX).localreader.sync
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionJavaScriptPreprocessingFile: Preprocess
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsWebPageWithMaxCount: 1
+  LocalReaderTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [LocalReaderTests]
+    dependencies:
+      - target: LocalReader
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(LOCAL_READER_BUNDLE_PREFIX).LocalReaderTests
+schemes:
+  LocalReader:
+    build:
+      targets:
+        LocalReader: all
+        LocalReaderTests: [test]
+    test:
+      targets: [LocalReaderTests]

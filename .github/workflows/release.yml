@@ -1,0 +1,47 @@
+name: Release
+
+# Push a tag like v0.2.0 after following docs/RELEASING.md. The tag must match
+# package.json, and CHANGELOG.md must have a dated "## [0.2.0] - YYYY-MM-DD"
+# section; its text becomes the release notes.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Release notes from CHANGELOG.md
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+
+      - name: Package the Chrome extension
+        id: extension
+        run: |
+          version="$(node -p "require('./extension/manifest.json').version")"
+          name="local-reader-chrome-extension-$version.zip"
+          (cd extension && zip -r -X "$RUNNER_TEMP/$name" . -x 'test-*' -x 'fixtures/*')
+          echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Local Reader $GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --verify-tag \
+            "${{ steps.extension.outputs.path }}"
